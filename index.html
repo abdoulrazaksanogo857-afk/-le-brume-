@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Île Brume</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a1424">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#0a1424;--ink:#e8eef6;--accent:#f2b630;--on-accent:#1a1200;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,"Liberation Sans",sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas{display:block;width:100%;height:100%}
+#ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(6,12,22,.88)}
+#ov.hide{display:none}
+.box{max-width:420px;text-align:left}
+h1{margin:0 0 10px;font-size:1.8rem;color:var(--accent)}
+p{margin:0 0 12px;line-height:1.5;font-size:1.05rem}
+.how{font-size:.9rem;opacity:.8}
+button{font:inherit;font-weight:700;padding:14px 26px;border:0;border-radius:10px;background:var(--accent);color:var(--on-accent);cursor:pointer}
+button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ov"><div class="box" id="box"></div></div>
+<script>
+(function(){
+var cv=document.getElementById("c"),g=cv.getContext("2d"),ov=document.getElementById("ov"),box=document.getElementById("box");
+var W=900,H=1300,V=0,VW=0,VH=0,dpr=1,sc=1;
+function fit(){dpr=window.devicePixelRatio||1;VW=innerWidth;VH=innerHeight;cv.width=VW*dpr;cv.height=VH*dpr;sc=Math.max(0.9,Math.min(1.3,VW/420))}
+addEventListener("resize",fit);fit();
+var OBS=[[200,300,40],[650,350,50],[420,520,45],[150,700,50],[700,760,45],[450,900,55],[250,1050,40],[650,1120,45],[450,330,30],[330,790,30],[580,640,28]];
+var ITEM_DEF={cle:{n:"clé",x:140,y:1160,c:"#c9c9d6"},huile:{n:"huile",x:820,y:910,c:"#f08a24"},allumettes:{n:"allumettes",x:110,y:520,c:"#ff5a4d"}};
+var CRABS0=[[300,1000],[700,900],[300,500],[600,450],[480,700],[750,260]];
+var P,crabs,got,hearts,tLeft,state="menu",toast="",toastT=0,over=0,keys={},joy=null,inv=0,beam=0;
+var TOTAL=110;
+function reset(){
+  P={x:450,y:1230,vx:0,vy:0,f:1};got={};hearts=3;tLeft=TOTAL;inv=0;toast="";toastT=0;over=0;
+  crabs=CRABS0.map(function(p){return{x:p[0],y:p[1],dx:0,dy:0,t:0}});
+}
+function hud(){return"cle,huile,allumettes".split(",")}
+function menu(title,lines,btn){
+  box.innerHTML="<h1>"+title+"</h1>"+lines.map(function(l){return"<p>"+l+"</p>"}).join("")+'<button id="go">'+btn+"</button>";
+  ov.className="";document.getElementById("go").onclick=start;document.getElementById("go").focus();
+}
+function start(){reset();state="play";ov.className="hide";last=performance.now()}
+menu("Île Brume",["Vous êtes le gardien. Un cargo approche des récifs et le phare est éteint.","Récupérez la <b>clé</b>, l’<b>huile</b> et les <b>allumettes</b>, puis rejoignez le phare avant qu’il ne soit trop tard. Évitez les crabes !",'<span class="how">Glissez le doigt pour vous déplacer (ou flèches / ZQSD au clavier).</span>'],"Jouer");
+function say(t){toast=t;toastT=2.2}
+function push(o,r,ob){OBS.forEach(function(b){var dx=o.x-b[0],dy=o.y-b[1],d=Math.hypot(dx,dy),m=r+b[2];if(d<m&&d>0){o.x=b[0]+dx/d*m;o.y=b[1]+dy/d*m}});
+  o.x=Math.max(r+20,Math.min(W-r-20,o.x));o.y=Math.max(r+20,Math.min(H-r-20,o.y))}
+var last=0;
+function update(dt){
+  var ix=0,iy=0;
+  if(keys.ArrowLeft||keys.q||keys.a)ix-=1;if(keys.ArrowRight||keys.d)ix+=1;
+  if(keys.ArrowUp||keys.z||keys.w)iy-=1;if(keys.ArrowDown||keys.s)iy+=1;
+  if(joy){var jx=joy.x-joy.sx,jy=joy.y-joy.sy,jd=Math.hypot(jx,jy);if(jd>8){var k=Math.min(1,jd/50);ix=jx/jd*k;iy=jy/jd*k}}
+  var il=Math.hypot(ix,iy);if(il>1){ix/=il;iy/=il}
+  P.x+=ix*170*dt;P.y+=iy*170*dt;if(ix)P.f=ix>0?1:-1;
+  push(P,12);
+  tLeft-=dt;if(inv>0)inv-=dt;if(toastT>0)toastT-=dt;beam+=dt;
+  hud().forEach(function(k){var it=ITEM_DEF[k];if(!got[k]&&Math.hypot(P.x-it.x,P.y-it.y)<28){got[k]=1;say("Vous avez trouvé : "+it.n)}});
+  crabs.forEach(function(c){
+    var d=Math.hypot(P.x-c.x,P.y-c.y),sp;
+    if(d<170){c.dx=(P.x-c.x)/d;c.dy=(P.y-c.y)/d;sp=90}
+    else{c.t-=dt;if(c.t<=0){var a=Math.random()*6.283;c.dx=Math.cos(a);c.dy=Math.sin(a);c.t=1+Math.random()*1.5}sp=45}
+    c.x+=c.dx*sp*dt;c.y+=c.dy*sp*dt;push(c,12);
+    if(d<22&&inv<=0){hearts--;inv=1.6;var kd=Math.max(d,1);P.x+=(P.x-c.x)/kd*40;P.y+=(P.y-c.y)/kd*40;push(P,12);
+      if(hearts<=0)finish(false,"Les crabes vous ont eu. Le Marguerite s’est échoué sur les récifs.")}
+  });
+  if(Math.hypot(P.x-450,P.y-120)<62){
+    if(hud().every(function(k){return got[k]}))finish(true);
+    else if(toastT<=0){var m=hud().filter(function(k){return!got[k]}).map(function(k){return ITEM_DEF[k].n});say("Il manque : "+m.join(", "))}
+  }
+  if(tLeft<=0)finish(false,"Trop tard. Le Marguerite a heurté les récifs avant l’aube.");
+}
+function finish(win,msg){
+  if(state!=="play")return;state=win?"win":"lose";
+  setTimeout(function(){
+    if(win)menu("Phare allumé !",["La flamme prend, le faisceau balaie la mer. Le Marguerite change de cap et contourne les récifs.","Temps restant : "+Math.ceil(tLeft)+" s, cœurs restants : "+hearts+"."],"Rejouer");
+    else menu("Raté…",[msg],"Réessayer");
+  },900);
+}
+function draw(){
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.fillStyle="#0b2233";g.fillRect(0,0,VW,VH);
+  var cs=sc,cx=Math.max(0,Math.min(W-VW/cs,P.x-VW/cs/2)),cy=Math.max(0,Math.min(H-VH/cs,P.y-VH/cs/2));
+  g.save();g.scale(cs,cs);g.translate(-cx,-cy);
+  g.fillStyle="#1d4a3f";g.fillRect(20,20,W-40,H-40);
+  g.fillStyle="#245a4c";for(var i=0;i<60;i++){g.fillRect((i*137)%W,(i*251)%H,6,3)}
+  g.strokeStyle="#6fb5c9";g.lineWidth=4;g.strokeRect(20,20,W-40,H-40);
+  OBS.forEach(function(b){g.fillStyle="#5d6b73";g.beginPath();g.arc(b[0],b[1],b[2],0,6.283);g.fill();g.fillStyle="#7a8a93";g.beginPath();g.arc(b[0]-b[2]*.2,b[1]-b[2]*.25,b[2]*.6,0,6.283);g.fill()});
+  hud().forEach(function(k){var it=ITEM_DEF[k];if(got[k])return;var p=1+Math.sin(beam*4)*.15;
+    g.fillStyle=it.c;g.globalAlpha=.3;g.beginPath();g.arc(it.x,it.y,22*p,0,6.283);g.fill();g.globalAlpha=1;g.fillRect(it.x-8,it.y-8,16,16);
+    g.fillStyle="#fff";g.font="12px Arial";g.textAlign="center";g.fillText(it.n,it.x,it.y-18)});
+  // phare
+  var lit=state==="win";
+  g.fillStyle="#e9e9ef";g.fillRect(425,60,50,70);g.fillStyle="#c23b3b";g.fillRect(425,80,50,14);g.fillRect(425,106,50,14);
+  g.fillStyle=lit?"#ffe27a":"#2a3340";g.fillRect(432,40,36,22);g.fillStyle="#8a2b2b";g.fillRect(426,32,48,10);
+  if(lit){g.fillStyle="rgba(255,226,122,.25)";g.beginPath();g.moveTo(450,51);g.arc(450,51,420,beam*2,beam*2+.5);g.fill()}
+  g.fillStyle="#a07d4a";g.fillRect(432,112,36,18);
+  crabs.forEach(function(c){g.fillStyle="#d2473f";g.beginPath();g.ellipse(c.x,c.y,13,9,0,0,6.283);g.fill();g.fillRect(c.x-17,c.y-6,5,5);g.fillRect(c.x+12,c.y-6,5,5);g.fillStyle="#fff";g.fillRect(c.x-5,c.y-9,3,4);g.fillRect(c.x+2,c.y-9,3,4)});
+  if(!(inv>0&&Math.floor(inv*12)%2)){g.fillStyle="#f2b630";g.beginPath();g.arc(P.x,P.y,12,0,6.283);g.fill();g.fillStyle="#7a5200";g.fillRect(P.x-12,P.y-12,24,6);g.fillStyle="#1a1200";g.fillRect(P.x+(P.f>0?3:-6),P.y-3,3,3)}
+  g.restore();
+  // HUD
+  g.textAlign="left";g.font="bold 20px Arial";
+  for(var h=0;h<3;h++){g.fillStyle=h<hearts?"#ff5a6b":"#3a4a5c";g.fillText("♥",14+h*24,34+0)}
+  hud().forEach(function(k,i){g.fillStyle=got[k]?ITEM_DEF[k].c:"#2e3d4d";g.fillRect(VW-34-i*30,16,20,20)});
+  var fr=Math.max(0,tLeft/TOTAL);g.fillStyle="#2e3d4d";g.fillRect(14,46,VW-28,8);g.fillStyle=fr>.3?"#4fc2ab":"#ff5a6b";g.fillRect(14,46,(VW-28)*fr,8);
+  g.fillStyle="#cfe0ee";g.font="12px Arial";g.fillText("Le cargo approche des récifs",14,70);
+  if(toastT>0){g.textAlign="center";g.fillStyle="rgba(0,0,0,.65)";g.fillRect(VW/2-130,VH-110,260,34);g.fillStyle="#fff";g.font="bold 15px Arial";g.fillText(toast,VW/2,VH-88)}
+  if(joy){g.strokeStyle="rgba(255,255,255,.4)";g.lineWidth=3;g.beginPath();g.arc(joy.sx,joy.sy,40,0,6.283);g.stroke();var jx=joy.x-joy.sx,jy=joy.y-joy.sy,jd=Math.min(40,Math.hypot(jx,jy)),an=Math.atan2(jy,jx);g.fillStyle="rgba(242,182,48,.7)";g.beginPath();g.arc(joy.sx+Math.cos(an)*jd,joy.sy+Math.sin(an)*jd,16,0,6.283);g.fill()}
+}
+function loop(t){
+  var dt=Math.min(.05,(t-last)/1000);last=t;
+  if(state==="play")update(dt);
+  if(state!=="menu"||P)draw();
+  requestAnimationFrame(loop);
+}
+reset();requestAnimationFrame(loop);
+cv.addEventListener("pointerdown",function(e){joy={sx:e.clientX,sy:e.clientY,x:e.clientX,y:e.clientY,id:e.pointerId};cv.setPointerCapture(e.pointerId)});
+cv.addEventListener("pointermove",function(e){if(joy&&joy.id===e.pointerId){joy.x=e.clientX;joy.y=e.clientY}});
+function up(e){if(joy&&joy.id===e.pointerId)joy=null}
+cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
+addEventListener("keydown",function(e){keys[e.key]=1;if(e.key.indexOf("Arrow")===0)e.preventDefault()});
+addEventListener("keyup",function(e){keys[e.key]=0});
+if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}
+})();
+</script>
+</body>
+</html>
